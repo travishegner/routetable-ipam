@@ -1,3 +1,3 @@
 #!/bin/bash
 
-go build -o bin/route-table route-table/main.go
+CGO_ENABLED=0 go build -o bin/route-table route-table/main.go
