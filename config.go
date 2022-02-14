@@ -1,4 +1,4 @@
-package routetable
+package main
 
 import (
 	"encoding/json"
