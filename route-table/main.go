@@ -5,9 +5,9 @@ import (
 	"os"
 	"strconv"
 
-	cni "github.com/phdata/go-libcni"
-	"github.com/phdata/routetable-ipam"
 	log "github.com/sirupsen/logrus"
+	cni "github.com/travishegner/go-libcni"
+	"github.com/travishegner/routetable-ipam"
 	"github.com/vishvananda/netlink"
 )
 

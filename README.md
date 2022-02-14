@@ -10,8 +10,8 @@ Some initial features include:
  * The ability to request a specific address in the network
  * The ability to exclude some number of addresses from the beginning or from the end of the range
 
-Along with a routing protocol, this plugin is intended to be coupled with a CNI plugin that provides the ability to span layer 2 networks across multiple nodes, such as our [vxlan-cni](https://github.com/phdata/vxlan-cni) plugin.
+Along with a routing protocol, this plugin is intended to be coupled with a CNI plugin that provides the ability to span layer 2 networks across multiple nodes, such as the [vxlan-cni](https://github.com/travishegner/vxlan-cni) plugin.
 
 
 
-The ipam concepts and some of this code were inspired by and are originally from [here](https://github.com/TrilliumIT/vxrouter)
+The ipam concepts and some of this code were inspired by and are originally from [here](https://github.com/TrilliumIT/vxrouter) and later forked from [here](https://github.com/phdata/routetable-ipam)

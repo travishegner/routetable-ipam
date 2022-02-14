@@ -3,7 +3,7 @@ package routetable
 import (
 	"encoding/json"
 
-	cni "github.com/phdata/go-libcni"
+	cni "github.com/travishegner/go-libcni"
 )
 
 /*
