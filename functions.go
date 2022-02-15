@@ -6,61 +6,80 @@ import (
 	"time"
 
 	"github.com/TrilliumIT/iputil"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
 
 // SelectAddress returns an available IP or the requested IP (if available) or an error on timeout
-func SelectAddress(cidr string, xf, xl int) (*net.IPNet, error) {
-	var ip *net.IPNet
+func SelectAddress(addr *net.IPNet, xf, xl int) (*net.IPNet, error) {
 	var err error
-	var sleepTime time.Duration
+	sleepTime := time.Duration(DefaultRequestedAddressSleepTime) * time.Millisecond
 
-	addr, _ := netlink.ParseIPNet(cidr)
-	subn := iputil.NetworkID(addr)
-	reqAddr := addr.IP
-	if addr.IP.Equal(subn.IP) {
-		reqAddr = nil
-		sleepTime = time.Duration(DefaultRequestedAddressSleepTime) * time.Millisecond
-	}
-
-	linkIndex, _ := LinkIndexFromIPNet(addr)
-
-	for {
-		ip, err = selectAddress(reqAddr, subn, linkIndex, xf, xl)
-		if err != nil {
-			return nil, err
-		}
-		if ip != nil {
-			break
-		}
-		time.Sleep(sleepTime)
-	}
-
-	return ip, nil
-}
-
-// selectAddress returns an available random IP on this network, or the requested IP
-// if it's available. This function may return (nil, nil) if it selects an unavailable address
-// the intention is for the caller to continue calling in a loop until an address is returned
-// this way the caller can implement their own timeout logic
-func selectAddress(reqAddress net.IP, sn *net.IPNet, linkIndex, xf, xl int) (*net.IPNet, error) {
-	addrInSubnet, addrOnly := GetIPNets(reqAddress, sn)
-
-	if reqAddress != nil && !sn.Contains(reqAddress) {
-		return nil, fmt.Errorf("requested address was not in this host interface's subnet")
-	}
-
-	// keep looking for a random address until one is found
-	if reqAddress == nil {
-		addrOnly.IP = iputil.RandAddrWithExclude(sn, xf, xl)
-		addrInSubnet.IP = addrOnly.IP
-	}
-	numRoutes, err := numRoutesTo(addrOnly)
+	linkIndex, err := LinkIndexFromIPNet(addr)
 	if err != nil {
 		return nil, err
 	}
+
+	search := false
+	randAddr := addr
+	var startAddr net.IP
+	var firstAddr net.IP
+	var lastAddr net.IP
+	if addr.IP.Equal(iputil.FirstAddr(addr)) {
+		search = true
+		randAddr.IP = iputil.RandAddrWithExclude(iputil.NetworkID(addr), xf, xl)
+		startAddr = randAddr.IP
+		firstAddr = iputil.IPAdd(iputil.FirstAddr(addr), xf)
+		lastAddr = iputil.IPAdd(iputil.LastAddr(addr), -1*xl)
+	}
+
+	for {
+		log.Debugf("attempting to provision %v", randAddr)
+		err = attemptAddress(randAddr, linkIndex)
+		if err == nil {
+			break
+		}
+
+		log.WithError(err).Warningf("unable to provision %v", randAddr)
+
+		if search {
+			randAddr.IP = iputil.IPAdd(randAddr.IP, 1)
+
+			if randAddr.IP.Equal(lastAddr) {
+				randAddr.IP = iputil.IPAdd(firstAddr, 1)
+			}
+
+			if randAddr.IP.Equal(startAddr) {
+				return nil, fmt.Errorf("exhausted address space and found no available address in %v", addr)
+			}
+		}
+
+		time.Sleep(sleepTime)
+	}
+
+	return randAddr, nil
+}
+
+// attemptAddress attempts to provision the requested address and returns an error if it is not able
+func attemptAddress(reqAddress *net.IPNet, linkIndex int) error {
+	if reqAddress == nil {
+		return fmt.Errorf("reqAddress cannot be nil")
+	}
+	if reqAddress.IP.Equal(iputil.FirstAddr(reqAddress)) {
+		return fmt.Errorf("cannot request the network ID of a subnet")
+	}
+	if reqAddress.IP.Equal(iputil.LastAddr(reqAddress)) {
+		return fmt.Errorf("cannot request the broadcast address of a subnet")
+	}
+
+	_, addrOnly := GetIPNets(reqAddress.IP, reqAddress)
+
+	numRoutes, err := numRoutesTo(addrOnly)
+	if err != nil {
+		return err
+	}
 	if numRoutes > 0 {
-		return nil, nil
+		return fmt.Errorf("address %v already in use", reqAddress)
 	}
 
 	// add host route to routing table
@@ -70,7 +89,7 @@ func selectAddress(reqAddress net.IP, sn *net.IPNet, linkIndex, xf, xl int) (*ne
 		Protocol:  DefaultRouteProtocol,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	//wait for at least estimated route propagation time
@@ -79,25 +98,30 @@ func selectAddress(reqAddress net.IP, sn *net.IPNet, linkIndex, xf, xl int) (*ne
 	//check that we are still the only route
 	numRoutes, err = numRoutesTo(addrOnly)
 	if err != nil {
-		return nil, err
+		err2 := DelRoute(linkIndex, addrOnly)
+		if err2 != nil {
+			return err2
+		}
+		return err
 	}
 
 	if numRoutes < 1 {
 		// The route either wasn't successfully added, or was removed,
 		// let the outer loop try again
-		return nil, nil
+		return fmt.Errorf("added %v to the routing table, but it was gone when we checked", addrOnly)
 	}
 
 	if numRoutes == 1 {
-		return addrInSubnet, nil
+		return nil
 	}
 
+	//address already in use
 	err = DelRoute(linkIndex, addrOnly)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return nil, nil
+	return fmt.Errorf("selected %v, but someone else selected it at the same time", addrOnly)
 }
 
 //GetIPNets takes an IP and a subnet and returns the IPNet representing the IP in the subnet,
@@ -132,7 +156,10 @@ func numRoutesTo(ipnet *net.IPNet) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	return len(routes), nil
+	if len(routes) != 1 {
+		return len(routes), nil
+	}
+	return len(routes[0].MultiPath), nil
 }
 
 // DelRoute deletes the /32 or /128 to the passed address

@@ -71,7 +71,11 @@ func main() {
 
 	switch vars.Command {
 	case "ADD":
-		addr, err := SelectAddress(cidr, xf, xl)
+		reqAddr, err := netlink.ParseIPNet(cidr)
+		if err != nil {
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while parsing the requested address/network cidr")
+		}
+		addr, err := SelectAddress(reqAddr, xf, xl)
 		if err != nil {
 			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while attempting to select an address and install the route")
 			return

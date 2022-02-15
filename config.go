@@ -17,7 +17,7 @@ import (
 */
 const (
 	DefaultRequestedAddressSleepTime = 100
-	DefaultPropagationTimeout        = 100
+	DefaultPropagationTimeout        = 250
 	DefaultRouteProtocol             = 192
 )
 
