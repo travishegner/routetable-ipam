@@ -11,14 +11,10 @@ import (
 )
 
 // SelectAddress returns an available IP or the requested IP (if available) or an error on timeout
-func SelectAddress(addr *net.IPNet, xf, xl int) (*net.IPNet, error) {
+func SelectAddress(addr *net.IPNet, linkIndex, xf, xl int) (*net.IPNet, error) {
+	log.Debugf("SelectAddress(%v, %v, %v)", addr, xf, xl)
 	var err error
 	sleepTime := time.Duration(DefaultRequestedAddressSleepTime) * time.Millisecond
-
-	linkIndex, err := LinkIndexFromIPNet(addr)
-	if err != nil {
-		return nil, err
-	}
 
 	search := false
 	randAddr := addr
@@ -156,10 +152,15 @@ func numRoutesTo(ipnet *net.IPNet) (int, error) {
 	if err != nil {
 		return -1, err
 	}
+	log.Debugf("%v routes to %v", len(routes), ipnet)
 	if len(routes) != 1 {
 		return len(routes), nil
 	}
-	return len(routes[0].MultiPath), nil
+	if len(routes[0].MultiPath) != 0 {
+		return len(routes[0].MultiPath), nil
+	}
+
+	return 1, nil
 }
 
 // DelRoute deletes the /32 or /128 to the passed address
@@ -169,22 +170,4 @@ func DelRoute(linkIndex int, ip *net.IPNet) error {
 		Dst:       ip,
 		Protocol:  DefaultRouteProtocol,
 	})
-}
-
-//LinkIndexFromIPNet gets the link index of the first interface which is on the same subnet as the parameter
-func LinkIndexFromIPNet(address *net.IPNet) (int, error) {
-	routes, err := netlink.RouteGet(address.IP)
-	if err != nil {
-		return -1, err
-	}
-
-	for _, r := range routes {
-		if r.Gw != nil {
-			continue
-		}
-
-		return r.LinkIndex, nil
-	}
-
-	return -1, fmt.Errorf("interface not found")
 }

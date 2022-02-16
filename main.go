@@ -60,23 +60,43 @@ func main() {
 	xf := 0
 	sxf, ok := vars.GetArg("EXCLUDE_FIRST")
 	if ok {
-		xf, _ = strconv.Atoi(sxf)
+		xf, err = strconv.Atoi(sxf)
+		if err != nil {
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "couldn't parse EXCLUDE_FIRST")
+			return
+		}
 	}
 
 	xl := 0
 	sxl, ok := vars.GetArg("EXCLUDE_LAST")
 	if ok {
-		xl, _ = strconv.Atoi(sxl)
+		xl, err = strconv.Atoi(sxl)
+		if err != nil {
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "couldn't parse EXCLUDE_LAST")
+			return
+		}
+	}
+
+	li := -1
+	sli, ok := vars.GetArg("LINK_INDEX")
+	if ok {
+		li, err = strconv.Atoi(sli)
+		if err != nil {
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "couldn't parse LINK_INDEX")
+			return
+		}
 	}
 
 	switch vars.Command {
 	case "ADD":
 		reqAddr, err := netlink.ParseIPNet(cidr)
 		if err != nil {
+			log.WithError(err).Error("failed while parsing the requested address/network cidr")
 			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while parsing the requested address/network cidr")
 		}
-		addr, err := SelectAddress(reqAddr, xf, xl)
+		addr, err := SelectAddress(reqAddr, li, xf, xl)
 		if err != nil {
+			log.WithError(err).Error("failed while attempting to select an address and install the route")
 			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while attempting to select an address and install the route")
 			return
 		}
@@ -96,14 +116,13 @@ func main() {
 		os.Stdout.Write(result.Marshal())
 	case "DEL":
 		//remove /32 route
-		addr, _ := netlink.ParseIPNet(cidr)
-		_, addrOnly := GetIPNets(addr.IP, addr)
-		linkIndex, err := LinkIndexFromIPNet(addrOnly)
+		addr, err := netlink.ParseIPNet(cidr)
 		if err != nil {
-			log.WithError(err).Errorf("failed to get link index from address")
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed parsing cidr")
 			return
 		}
-		DelRoute(linkIndex, addrOnly)
+		_, addrOnly := GetIPNets(addr.IP, addr)
+		DelRoute(li, addrOnly)
 		return
 	case "CHECK":
 		return
