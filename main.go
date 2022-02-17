@@ -91,6 +91,7 @@ func main() {
 	case "ADD":
 		result, err := handleAdd(cidr, li, xf, xl)
 		if err != nil {
+			log.WithError(err).Error("error while handling add")
 			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while adding address")
 			return
 		}
@@ -99,16 +100,19 @@ func main() {
 	case "DEL":
 		err := handleDel(cidr, li)
 		if err != nil {
+			log.WithError(err).Error("error while handling del")
 			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while deleting address")
 			return
 		}
 	case "CHECK":
 		err := handleCheck(cidr, li)
 		if err != nil {
+			log.WithError(err).Error("error while handling check")
 			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while checking address")
 			return
 		}
 	default:
+		log.Error("invalid CNI command")
 		exitCode, exitOutput = cni.PrepareExit(nil, 4, "invalid CNI_COMMAND")
 		return
 	}

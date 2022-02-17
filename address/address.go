@@ -83,7 +83,6 @@ func Get(cidr string, linkIndex int) (*Address, error) {
 	message := fmt.Sprintf("address.Get(%v, %v)", cidr, linkIndex)
 	log.Debugf(message)
 	handlerr := func(err error) error {
-		log.WithError(err).Error(message)
 		return fmt.Errorf("%v: %w", message, err)
 	}
 
@@ -184,7 +183,6 @@ func (a *Address) Delete() error {
 	message := "a.Delete()"
 	log.Debugf(message)
 	handlerr := func(err error) error {
-		log.WithError(err).Error(message)
 		return fmt.Errorf("%v: %w", message, err)
 	}
 	err := netlink.RouteDel(&netlink.Route{
@@ -203,7 +201,6 @@ func (a *Address) Delete() error {
 func (a *Address) numRoutes() (int, error) {
 	message := "a.numRoutes()"
 	handlerr := func(err error) error {
-		log.WithError(err).Errorf(message)
 		return fmt.Errorf("%v: %w", message, err)
 	}
 
