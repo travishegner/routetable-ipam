@@ -7,7 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	cni "github.com/travishegner/go-libcni"
-	"github.com/vishvananda/netlink"
+	"github.com/travishegner/routetable-ipam/address"
 )
 
 func main() {
@@ -89,49 +89,27 @@ func main() {
 
 	switch vars.Command {
 	case "ADD":
-		reqAddr, err := netlink.ParseIPNet(cidr)
+		result, err := handleAdd(cidr, li, xf, xl)
 		if err != nil {
-			log.WithError(err).Error("failed while parsing the requested address/network cidr")
-			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while parsing the requested address/network cidr")
-		}
-		addr, err := SelectAddress(reqAddr, li, xf, xl)
-		if err != nil {
-			log.WithError(err).Error("failed while attempting to select an address and install the route")
-			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while attempting to select an address and install the route")
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while adding address")
 			return
 		}
-		ipVer := "4"
-		if addr.IP.To4() == nil {
-			ipVer = "6"
-		}
-		ips := make([]*cni.IP, 1)
-		ips[0] = &cni.IP{
-			Version: ipVer,
-			Address: addr.String(),
-		}
-		result := &cni.Result{
-			CNIVersion: cni.CNIVersion,
-			IPs:        ips,
-		}
-		os.Stdout.Write(result.Marshal())
+
+		os.Stdout.Write(result)
 	case "DEL":
-		//remove /32 route
-		addr, err := netlink.ParseIPNet(cidr)
+		err := handleDel(cidr, li)
 		if err != nil {
-			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed parsing cidr")
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while deleting address")
 			return
 		}
-		_, addrOnly := GetIPNets(addr.IP, addr)
-		DelRoute(li, addrOnly)
-		return
 	case "CHECK":
-		return
-		//if all "ADD" steps are correct
-		//exit 0
-		//else
-		//exit error
+		err := handleCheck(cidr, li)
+		if err != nil {
+			exitCode, exitOutput = cni.PrepareExit(err, 11, "failed while checking address")
+			return
+		}
 	default:
-		exitCode, exitOutput = cni.PrepareExit(fmt.Errorf("CNI_COMMAND was not set, or set to an invalid value"), 4, "invalid CNI_COMMAND")
+		exitCode, exitOutput = cni.PrepareExit(nil, 4, "invalid CNI_COMMAND")
 		return
 	}
 }
@@ -139,4 +117,61 @@ func main() {
 func exit(code int, output []byte) {
 	os.Stdout.Write(output)
 	os.Exit(code)
+}
+
+func handleAdd(cidr string, linkIndex, excludeFirst, excludeLast int) ([]byte, error) {
+	message := fmt.Sprintf("handleAdd(%v, %v, %v, %v)", cidr, linkIndex, excludeFirst, excludeLast)
+	log.Debug(message)
+	handlerr := func(err error) error {
+		return fmt.Errorf("%v: %w", message, err)
+	}
+
+	addr, err := address.New(cidr, linkIndex, excludeFirst, excludeLast)
+	if err != nil {
+		return nil, handlerr(err)
+	}
+	ipVer := "4"
+	if addr.IPNet.IP.To4() == nil {
+		ipVer = "6"
+	}
+	ips := make([]*cni.IP, 1)
+	ips[0] = &cni.IP{
+		Version: ipVer,
+		Address: addr.IPNet.String(),
+	}
+	result := &cni.Result{
+		CNIVersion: cni.CNIVersion,
+		IPs:        ips,
+	}
+
+	return result.Marshal(), nil
+}
+
+func handleDel(cidr string, linkIndex int) error {
+	message := fmt.Sprintf("handleDel(%v, %v)", cidr, linkIndex)
+	log.Debug(message)
+	handlerr := func(err error) error {
+		return fmt.Errorf("%v: %w", message, err)
+	}
+
+	addr, err := address.Get(cidr, linkIndex)
+	if err != nil {
+		return handlerr(err)
+	}
+
+	err = addr.Delete()
+	if err != nil {
+		return handlerr(err)
+	}
+
+	return nil
+}
+
+func handleCheck(cidr string, linkIndex int) error {
+	message := fmt.Sprintf("handleCheck(%v, %v)", cidr, linkIndex)
+	log.Debug(message)
+	//handlerr := func(err error) error {
+	//	return fmt.Errorf("%v: %w", message, err)
+	//}
+	return nil
 }
