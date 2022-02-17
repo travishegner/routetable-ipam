@@ -103,29 +103,22 @@ func (a *Address) IP() net.IP {
 }
 
 func (a *Address) attempt() error {
-	message := "a.attempt()"
-	log.Debugf(message)
-	handlerr := func(err error) error {
-		log.WithError(err).Error(message)
-		return fmt.Errorf("%v: %w", message, err)
-	}
-
 	if a.IPNet == nil {
-		return handlerr(fmt.Errorf("ipnet cannot be nil"))
+		return fmt.Errorf("ipnet cannot be nil")
 	}
 	if a.IP().Equal(iputil.FirstAddr(a.IPNet)) {
-		return handlerr(fmt.Errorf("cannot request the network ID %v", a.IPNet))
+		return fmt.Errorf("cannot request the network ID %v", a.IPNet)
 	}
 	if a.IP().Equal(iputil.LastAddr(a.IPNet)) {
-		return handlerr(fmt.Errorf("cannot request the broadcast address %v", a.IPNet))
+		return fmt.Errorf("cannot request the broadcast address %v", a.IPNet)
 	}
 
 	numRoutes, err := a.numRoutes()
 	if err != nil {
-		return handlerr(err)
+		return fmt.Errorf("failed to get number of routes: %w", err)
 	}
 	if numRoutes > 0 {
-		return handlerr(fmt.Errorf("address %v already in use", a.IPNet))
+		return fmt.Errorf("address %v already in use", a.IPNet)
 	}
 
 	// add host route to routing table
@@ -135,7 +128,7 @@ func (a *Address) attempt() error {
 		Protocol:  DefaultRouteProtocol,
 	})
 	if err != nil {
-		return handlerr(err)
+		return fmt.Errorf("failed to add route %v: %w", a.hostNet(), err)
 	}
 
 	//wait for at least estimated route propagation time
@@ -144,17 +137,14 @@ func (a *Address) attempt() error {
 	//check that we are still the only route
 	numRoutes, err = a.numRoutes()
 	if err != nil {
-		err2 := a.Delete()
-		if err2 != nil {
-			return handlerr(err2)
-		}
-		return handlerr(err)
+		a.Delete()
+		return fmt.Errorf("failed to get number of routes: %w", err)
 	}
 
 	if numRoutes < 1 {
 		// The route either wasn't successfully added, or was removed,
 		// let the outer loop try again
-		return handlerr(fmt.Errorf("added %v to the routing table, but it was gone when we checked", a.IPNet))
+		return fmt.Errorf("added %v to the routing table, but it was gone when we checked", a.IPNet)
 	}
 
 	if numRoutes == 1 {
@@ -162,12 +152,8 @@ func (a *Address) attempt() error {
 	}
 
 	//address already in use
-	err = a.Delete()
-	if err != nil {
-		return handlerr(err)
-	}
-
-	return handlerr(fmt.Errorf("selected %v, but someone else selected it at the same time", a.IPNet))
+	a.Delete()
+	return fmt.Errorf("selected %v, but someone else selected it at the same time", a.IPNet)
 }
 
 func (a *Address) hostNet() *net.IPNet {
@@ -180,11 +166,6 @@ func (a *Address) hostNet() *net.IPNet {
 
 //Delete deletes the address from the routing table
 func (a *Address) Delete() error {
-	message := "a.Delete()"
-	log.Debugf(message)
-	handlerr := func(err error) error {
-		return fmt.Errorf("%v: %w", message, err)
-	}
 	err := netlink.RouteDel(&netlink.Route{
 		LinkIndex: a.linkIndex,
 		Dst:       a.hostNet(),
@@ -192,21 +173,16 @@ func (a *Address) Delete() error {
 	})
 
 	if err != nil {
-		return handlerr(err)
+		return fmt.Errorf("error deleting route %v: %w", a.hostNet(), err)
 	}
 
 	return nil
 }
 
 func (a *Address) numRoutes() (int, error) {
-	message := "a.numRoutes()"
-	handlerr := func(err error) error {
-		return fmt.Errorf("%v: %w", message, err)
-	}
-
 	routes, err := netlink.RouteListFiltered(0, &netlink.Route{Dst: a.hostNet()}, netlink.RT_FILTER_DST)
 	if err != nil {
-		return -1, handlerr(err)
+		return -1, fmt.Errorf("failed to list filtered routes to %v: %w", a.hostNet(), err)
 	}
 	if len(routes) != 1 {
 		return len(routes), nil

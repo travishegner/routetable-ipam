@@ -124,15 +124,11 @@ func exit(code int, output []byte) {
 }
 
 func handleAdd(cidr string, linkIndex, excludeFirst, excludeLast int) ([]byte, error) {
-	message := fmt.Sprintf("handleAdd(%v, %v, %v, %v)", cidr, linkIndex, excludeFirst, excludeLast)
-	log.Debug(message)
-	handlerr := func(err error) error {
-		return fmt.Errorf("%v: %w", message, err)
-	}
+	log.Debugf("handleAdd(%v, %v, %v, %v)", cidr, linkIndex, excludeFirst, excludeLast)
 
 	addr, err := address.New(cidr, linkIndex, excludeFirst, excludeLast)
 	if err != nil {
-		return nil, handlerr(err)
+		return nil, fmt.Errorf("failed to create new address %v: %w", cidr, err)
 	}
 	ipVer := "4"
 	if addr.IPNet.IP.To4() == nil {
@@ -152,30 +148,22 @@ func handleAdd(cidr string, linkIndex, excludeFirst, excludeLast int) ([]byte, e
 }
 
 func handleDel(cidr string, linkIndex int) error {
-	message := fmt.Sprintf("handleDel(%v, %v)", cidr, linkIndex)
-	log.Debug(message)
-	handlerr := func(err error) error {
-		return fmt.Errorf("%v: %w", message, err)
-	}
+	log.Debugf("handleDel(%v, %v)", cidr, linkIndex)
 
 	addr, err := address.Get(cidr, linkIndex)
 	if err != nil {
-		return handlerr(err)
+		return fmt.Errorf("failed to get address %v: %w", cidr, err)
 	}
 
 	err = addr.Delete()
 	if err != nil {
-		return handlerr(err)
+		return fmt.Errorf("failed to delete address %v: %w", cidr, err)
 	}
 
 	return nil
 }
 
 func handleCheck(cidr string, linkIndex int) error {
-	message := fmt.Sprintf("handleCheck(%v, %v)", cidr, linkIndex)
-	log.Debug(message)
-	//handlerr := func(err error) error {
-	//	return fmt.Errorf("%v: %w", message, err)
-	//}
+	log.Debugf("handleCheck(%v, %v)", cidr, linkIndex)
 	return nil
 }
